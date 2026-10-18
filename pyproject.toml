@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-converter"
+version = "1.0.0"
+description = "PDF / DOCX / HTML / Markdown 任意互转的文档转换助手"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "doc-converter contributors" }]
+keywords = ["pdf", "docx", "html", "markdown", "converter", "document"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Processing :: Markup",
+]
+dependencies = [
+    "python-docx>=1.1.0",
+    "beautifulsoup4>=4.12",
+    "markdown-it-py>=3.0",
+    "linkify-it-py>=2.0",
+    "pdfplumber>=0.11",
+    "Pillow>=10.0",
+    "lxml>=4.9",
+    "pypdf>=4.0",
+    "xhtml2pdf>=0.2.11",
+]
+
+[project.optional-dependencies]
+# PDF 输出首选引擎：排版质量最佳，需 GTK/Pango 原生运行时；
+# 未安装时自动降级到 xhtml2pdf。
+weasyprint = ["weasyprint>=60"]
+dev = ["pytest>=7.0", "weasyprint>=60; sys_platform != 'win32'"]
+
+[project.scripts]
+doc-converter = "doc_converter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
