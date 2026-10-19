@@ -6,8 +6,10 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-18%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-19%20passed-brightgreen)]()
 [![PyPI](https://img.shields.io/badge/pypi-doc--converter-orange)]()
+
+**语言 / Language**：[English](README_EN.md) | [简体中文](README.md)
 
 </div>
 
@@ -192,18 +194,19 @@ doc-converter/
 │   └── convert_all.py         # 12 种互转组合端到端验证
 ├── tests/
 │   ├── conftest.py
-│   └── test_converter.py      # 18 个用例：矩阵/结构/资源/CLI/错误处理
+│   └── test_converter.py      # 19 个用例：矩阵/结构/资源/CLI/错误处理
 ├── pyproject.toml             # 打包与依赖（含 doc-converter 命令入口）
 ├── requirements.txt
 ├── LICENSE                    # MIT
-└── README.md
+├── README.md                  # 简体中文（当前）
+└── README_EN.md               # English
 ```
 
 ## 测试
 
 ```bash
 pip install pytest
-pytest -q          # 18 passed
+pytest -q          # 19 passed
 ```
 
 覆盖：四种源格式互转、标题/列表/表格/链接/代码块结构断言、图片落盘与 DOCX 内嵌、附件提取、批量容错、CLI 行为、错误码（文件不存在/不支持格式/同格式转换）。
