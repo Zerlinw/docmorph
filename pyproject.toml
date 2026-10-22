@@ -1,46 +1,72 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "doc-converter"
-version = "1.0.0"
-description = "PDF / DOCX / HTML / Markdown 任意互转的文档转换助手"
+version = "2.0.0"
+description = "PDF / DOCX / HTML / Markdown 任意互转的文档转换助手（含 Windows 桌面版）"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "doc-converter contributors" }]
-keywords = ["pdf", "docx", "html", "markdown", "converter", "document"]
+keywords = ["pdf", "docx", "html", "markdown", "converter", "document", "gui"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Text Processing :: Markup",
 ]
 dependencies = [
-    "python-docx>=1.1.0",
-    "beautifulsoup4>=4.12",
-    "markdown-it-py>=3.0",
+    "python-docx>=1.2.0",
+    "beautifulsoup4>=4.14",
+    "markdown-it-py>=4.0",
     "linkify-it-py>=2.0",
-    "pdfplumber>=0.11",
-    "Pillow>=10.0",
-    "lxml>=4.9",
-    "pypdf>=4.0",
-    "xhtml2pdf>=0.2.11",
+    "pdfplumber>=0.11.8",
+    "Pillow>=11.0",
+    "lxml>=6.0",
+    "pypdf>=6.0",
+    "xhtml2pdf>=0.2.17",
 ]
 
 [project.optional-dependencies]
-# PDF 输出首选引擎：排版质量最佳，需 GTK/Pango 原生运行时；
-# 未安装时自动降级到 xhtml2pdf。
-weasyprint = ["weasyprint>=60"]
-dev = ["pytest>=7.0", "weasyprint>=60; sys_platform != 'win32'"]
+# PDF 输出首选引擎：排版质量最佳，需 GTK/Pango 原生运行时（Linux/macOS 常见）。
+# Windows 上通常不可用，会自动降级到 Edge/Chrome 无头打印或 xhtml2pdf。
+weasyprint = ["weasyprint>=65"]
+# 桌面 GUI（打包 DocConverter.exe 时必需）
+gui = ["PySide6>=6.9"]
+# 开发与打包
+dev = [
+    "pytest>=8.0",
+    "pyinstaller>=6.16",
+    "PySide6>=6.9",
+    "weasyprint>=65; sys_platform != 'win32'",
+]
 
 [project.scripts]
 doc-converter = "doc_converter.cli:main"
 
+[project.gui-scripts]
+DocConverter = "doc_converter.launcher:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+doc_converter = ["gui/*.png", "gui/*.ico"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

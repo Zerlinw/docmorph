@@ -32,6 +32,8 @@ class Text(Inline):
     strike: bool = False
     code: bool = False
     color: Optional[str] = None
+    superscript: bool = False
+    subscript: bool = False
 
 
 @dataclass
@@ -53,6 +55,8 @@ class ImageInline(Inline):
     mime: str = "image/png"
     width_emu: Optional[int] = None                # DOCX 中的原始尺寸（EMU）
     height_emu: Optional[int] = None
+    width_px: Optional[int] = None                 # HTML 图片属性中的像素尺寸
+    height_px: Optional[int] = None
 
 
 @dataclass
@@ -78,12 +82,16 @@ class Heading(Block):
 @dataclass
 class Paragraph(Block):
     children: list[Inline] = field(default_factory=list)
+    # 源文档中的对齐方式：left / center / right / justify（可空）
+    align: Optional[str] = None
 
 
 @dataclass
 class ListItem:
     children: list[Inline] = field(default_factory=list)
     level: int = 0
+    #: 嵌套在列表项内部的块（子列表、代码块等），优先于 level 表达嵌套
+    blocks: list["Block"] = field(default_factory=list)
 
 
 @dataclass
@@ -96,6 +104,8 @@ class ListBlock(Block):
 @dataclass
 class TableCell:
     children: list[Inline] = field(default_factory=list)
+    colspan: int = 1
+    rowspan: int = 1
 
 
 @dataclass
@@ -116,6 +126,8 @@ class ImageBlock(Block):
     mime: str = "image/png"
     width_emu: Optional[int] = None
     height_emu: Optional[int] = None
+    width_px: Optional[int] = None
+    height_px: Optional[int] = None
 
 
 @dataclass
@@ -127,6 +139,8 @@ class CodeBlock(Block):
 @dataclass
 class QuoteBlock(Block):
     children: list[Inline] = field(default_factory=list)
+    #: 引用内部的块级结构（多段引用时保留分段）
+    blocks: list["Block"] = field(default_factory=list)
 
 
 @dataclass
@@ -141,6 +155,10 @@ class FlowchartBlock(Block):
     nodes: list[str] = field(default_factory=list)
     edges: list[tuple[str, str]] = field(default_factory=list)
     title: Optional[str] = None
+    #: 原始 Mermaid 源码（若来源本身是 Mermaid，可无损回写）
+    source: Optional[str] = None
+    #: 是否为有向图
+    directed: bool = True
 
 
 @dataclass
@@ -166,9 +184,12 @@ class Document:
     # 元信息：源格式、源文件路径，便于写入器做格式特定优化
     source_format: Optional[str] = None
     source_path: Optional[str] = None
+    #: 作者 / 主题 / 关键词 / 创建时间等（HTML meta、DOCX/PDF 属性）
+    metadata: dict[str, str] = field(default_factory=dict)
 
     def warn(self, message: str) -> None:
-        self.warnings.append(message)
+        if message not in self.warnings:      # 去重，避免批量告警刷屏
+            self.warnings.append(message)
 
     def is_empty(self) -> bool:
         return not any(_block_has_content(b) for b in self.blocks)
@@ -180,17 +201,29 @@ def _block_has_content(block: Block) -> bool:
     if isinstance(block, Paragraph):
         return bool(block.children)
     if isinstance(block, QuoteBlock):
-        return bool(block.children)
+        return bool(block.children) or bool(block.blocks)
     if isinstance(block, ListBlock):
         return bool(block.items)
     if isinstance(block, TableBlock):
         return bool(block.rows)
-    if isinstance(block, ImageBlock):
+    if isinstance(block, (ImageBlock, ImageInline)):
         return bool(block.data or block.src)
     if isinstance(block, CodeBlock):
         return bool(block.text.strip())
     if isinstance(block, FlowchartBlock):
-        return bool(block.nodes)
+        return bool(block.nodes) or bool(block.source)
     if isinstance(block, Attachment):
         return bool(block.data)
     return True  # HorizontalRule 等
+
+
+def iter_blocks(blocks: list[Block]):
+    """深度遍历块（含引用与列表项内部的块），供写入器统一处理。"""
+    for block in blocks:
+        yield block
+        if isinstance(block, QuoteBlock):
+            yield from iter_blocks(block.blocks)
+        elif isinstance(block, ListBlock):
+            for item in block.items:
+                if item.blocks:
+                    yield from iter_blocks(item.blocks)

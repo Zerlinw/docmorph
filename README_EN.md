@@ -1,109 +1,132 @@
-# doc-converter
+# doc-converter · Document Converter
 
 <div align="center">
 
-**A document conversion toolkit for lossless conversion between PDF, DOCX, HTML, and Markdown**
+**Convert PDF / DOCX / HTML / Markdown in any direction — desktop app + CLI + Python API**
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10%20~%203.14-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![PySide6](https://img.shields.io/badge/GUI-PySide6%206.12-41cd52?logo=qt&logoColor=white)](https://doc.qt.io/qtforpython/)
+[![Tests](https://img.shields.io/badge/tests-84%20passed-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-19%20passed-brightgreen)]()
-[![PyPI](https://img.shields.io/badge/pypi-doc--converter-orange)]()
+[![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?logo=windows&logoColor=white)]()
 
-**Language**: English · [简体中文](README.md)
+**Language**：[English](README_EN.md) | [简体中文](README.md)
 
 </div>
 
 ---
 
-## Introduction
+## Overview
 
-`doc-converter` is a pure-Python document format conversion tool that supports **arbitrary conversion between PDF, DOCX, HTML, and Markdown** (12 valid combinations in total).
+`doc-converter` is a fully offline document conversion tool supporting **all 12 conversion
+combinations between PDF, DOCX, HTML and Markdown**. It ships as:
 
-Rather than naive text copying, conversion is built on a **unified intermediate representation (IR)** architecture:
+- a **Windows desktop app** (`DocConverter.exe`) with drag & drop and batch conversion;
+- a **command-line tool** (`doc-converter.exe` / `python -m doc_converter`);
+- a **Python API** (`convert()` / `convert_batch()`).
+
+All readers parse their source into a single **intermediate representation (IR)**, and all
+writers render that IR into the target format:
 
 ```
-Source ──► Reader ──► Document (IR) ──► Writer ──► Target
-          (docx/html/md/pdf)            (md/html/docx/pdf)
+source ──► Reader ──► Document (IR) ──► Writer ──► target
+        (docx/html/md/pdf)        (md/html/docx/pdf)
 ```
 
-The IR fully describes heading levels, paragraphs, lists (including nesting), tables, hyperlinks, inline/block images, code blocks, quotations, flowchart structures, binary attachments, and more. Adding support for a new format only requires implementing one Reader/Writer pair, which automatically gains interoperability with every other format.
+The IR covers headings, paragraphs, nested lists, tables (header / colspan / rowspan),
+hyperlinks, inline and block images, code blocks, quotes, flowcharts, binary attachments
+and document metadata.
+
+![Desktop UI](docs/gui-light.png)
 
 ## Features
 
-| Capability | Description |
+| Capability | Details |
 | --- | --- |
-| Universal conversion | Pairwise conversion across 4 formats, 12 combinations, with complete text preservation |
-| Structure preservation | Heading levels, paragraphs, ordered/unordered/nested lists, tables (with headers), block quotes, code blocks, horizontal rules |
-| Basic styling | Bold, italic, underline, strikethrough, inline code, and text color (mapped according to target format capabilities) |
-| Images | Binary extraction for DOCX, region-based cropping for PDF, relative-path and data URI resolution for HTML/Markdown; output as standalone files with correct references (embedded in DOCX, inlined in PDF) |
-| Flowcharts | Node extraction from DOCX group shapes (SmartArt/text boxes with connectors); Mermaid code blocks parsed into flowchart structures; rendered according to target format capabilities (MD→Mermaid, HTML→rendered Mermaid, DOCX→node list + Mermaid appendix, PDF→text structure) |
-| Attachments | Automatic extraction of DOCX OLE embedded objects and PDF EmbeddedFiles to disk, linked in the output |
-| Batch conversion | Multiple files, glob patterns, directory output; failure of a single file does not affect the others |
-| Graceful degradation | Every element that cannot be perfectly converted produces an explicit warning (`ConversionResult.warnings`) instead of being silently dropped |
-| Complete interfaces | Python API (`convert` / `convert_batch`) plus a command-line entry point (`python -m doc_converter`) |
+| Any-to-any | 12 conversion combinations between 4 formats |
+| Structure | Headings, paragraphs, ordered/unordered/nested lists, tables with header and merged cells, quotes, code blocks, horizontal rules |
+| Inline styles | Bold, italic, underline, strikethrough, inline code, superscript/subscript, colour |
+| Lists | Nested list hierarchy preserved for Markdown/HTML; DOCX `w:numPr` numbering (including localized style names) with per-list numbering restart |
+| Images | DOCX binary extraction, PDF original stream/crop fallback, HTML/MD relative paths, data URIs and remote URLs; written as sidecar files, inlined as data URIs, or embedded natively in DOCX, with alt text |
+| Flowcharts | DOCX grouped shapes → nodes; Mermaid → flow structure with source preserved; rendered per target (MD/HTML → Mermaid, DOCX → boxes + Mermaid appendix, PDF → text structure) |
+| Attachments | DOCX OLE objects and PDF embedded files are extracted; PDF output also embeds the attachment inside the PDF itself |
+| Metadata | DOCX/PDF title, author, subject, keywords; HTML `<meta>`/`<title>`; PDF `/Title`, `/Author` |
+| PDF engines | Auto: local Edge/Chrome headless → WeasyPrint → xhtml2pdf, with automatic fallback and warnings |
+| Batch | Multiple files, globs, recursive directories, collision-safe output names, per-file error isolation |
+| Diagnostics | Every imperfect conversion emits a warning in `ConversionResult.warnings`; nothing is silently dropped |
+| Desktop UX | Drag & drop, per-file progress and status, live log, light/dark themes, cancel, open output folder, remembered settings |
 
-## Installation
+| Light | Dark |
+| --- | --- |
+| ![Light](docs/gui-light.png) | ![Dark](docs/gui-dark.png) |
 
-```bash
-# Option 1: install as a library / CLI tool
-pip install -e .
+## Run on Windows
 
-# Option 2: install dependencies only and run from the src/ directory
-pip install -r requirements.txt
+Run `dist\DocConverter.exe` (single file, no Python installation required):
+
+1. Double-click `DocConverter.exe`;
+2. Drop files or folders into the window, or use “Add files / Add folder”;
+3. Pick the target format, output folder and PDF options;
+4. Click “Start” and watch the log for results and warnings.
+
+> **PDF quality**: Windows 10/11 ships Microsoft Edge; the app uses its headless print
+> engine for the best CJK/table/code layout. If Edge is unavailable it falls back to the
+> bundled pure-Python engine automatically.
+
+The same executable also accepts CLI arguments:
+
+```bat
+DocConverter.exe --help
+DocConverter.exe report.docx -t md -o out\
+DocConverter.exe "docs\*.pdf" -t docx -o out\ --pdf-engine chromium
 ```
 
-> **About the PDF output engine**: [WeasyPrint](https://weasyprint.org/) is preferred (best typographic quality, but requires the GTK/Pango native runtime; usually works out of the box on Linux/macOS). When it is not installed or the native libraries are unavailable, the tool automatically falls back to the pure-Python `xhtml2pdf` (with built-in CJK font registration, so Chinese text does not turn into boxes).
-
-## Quick Start
-
-### Command Line
+## Command line
 
 ```bash
-# Single file (source format is inferred from the file extension)
-python -m doc_converter report.docx -t md -o out/
-
-# Batch conversion (glob supported; expanded by the program when the shell does not)
-python -m doc_converter "docs/*.docx" -t pdf -o out/
-
-# Explicitly specify the source format and asset handling
-python -m doc_converter input.bin -f html -t docx -o out/ --assets embed
+doc-converter report.docx -t md -o out/              # single file
+doc-converter "docs/*.docx" -t pdf -o out/           # glob
+doc-converter docs/ -t html -o out/                  # recursive directory
+doc-converter report.md -t pdf --pdf-engine chromium --page-size A4
+doc-converter input.bin -f html -t docx -o out/ --assets embed
 ```
-
-Full arguments:
 
 ```
 usage: doc-converter [-h] -t {pdf,docx,html,md} [-f {pdf,docx,html,md}]
-                     [-o PATH] [--assets {file,datauri,embed}] [-q] [--strict]
-                     INPUT [INPUT ...]
+                     [-o PATH] [--assets {file,datauri,embed}]
+                     [--pdf-engine {auto,chromium,weasyprint,xhtml2pdf}]
+                     [--page-size {A4,Letter,A3,A5}] [-q] [--strict]
+                     [--list-engines] [-V] [INPUT ...]
 ```
 
-| Argument | Description |
+| Option | Description |
 | --- | --- |
-| `INPUT` | Input file(s); glob patterns are supported and multiple files can be passed at once |
-| `-t, --to` | Target format: `pdf` / `docx` / `html` / `md` |
-| `-f, --from` | Source format (inferred from the extension by default; aliases such as `doc`→`docx`, `htm`→`html`, `markdown`→`md` are also supported) |
-| `-o, --output` | Output path: a directory (auto-named `original-name.target-format`) or a specific file (recommended for single-file conversion only) |
-| `--assets` | Asset handling mode: `file` (default, for MD/HTML), `datauri` (default for PDF), `embed` (default for DOCX, binary embedding) |
-| `-q, --quiet` | Print errors only |
-| `--strict` | Abort on the first failure in batch mode |
+| `INPUT` | Files / globs / directories (recursively collected) |
+| `-t, --to` | Target format: `pdf`, `docx`, `html`, `md` |
+| `-f, --from` | Source format (inferred from extension by default) |
+| `-o, --output` | Output directory or explicit file path |
+| `--assets` | Asset mode: `file`, `datauri`, `embed` |
+| `--pdf-engine` | `auto` (default), `chromium`, `weasyprint`, `xhtml2pdf` |
+| `--page-size` | `A4` (default), `Letter`, `A3`, `A5` |
+| `--list-engines` | Show available PDF engines |
+| `-q, --quiet` / `--strict` | Errors only / stop at first failure |
 
-### Python API
+## Python API
 
 ```python
 from doc_converter import convert, convert_batch
 
-# Single file
 result = convert("report.docx", target="md", output="out/")
-print(result.output)          # out/report.md
-print(result.warnings)        # degradation / diagnostic messages
-print(result.assets)          # generated asset files
+print(result.output, result.warnings, result.assets)
 
-# Batch (a single failure does not interrupt the rest)
-results, failures = convert_batch(
-    ["a.docx", "b.html", "c.pdf"], target="md", output="out/")
+result = convert("report.md", target="pdf", output="out/",
+                 pdf_engine="chromium", page_size="A4")
+print(result.engine)
+
+results, failures = convert_batch(["a.docx", "b.html"], target="md", output="out/")
 ```
 
-## Conversion Matrix and Capability Boundaries
+## Conversion matrix
 
 | Source \ Target | Markdown | HTML | DOCX | PDF |
 | --- | :-: | :-: | :-: | :-: |
@@ -112,148 +135,66 @@ results, failures = convert_batch(
 | **DOCX** | ✅ | ✅ | — | ✅ |
 | **PDF** | ⚠️ | ⚠️ | ⚠️ | — |
 
-Legend: ✅ fully supported; ⚠️ heuristic reconstruction (PDF is a layout-driven format: heading levels are inferred from font sizes, tables are rebuilt from text positions/rules, and links are extracted from annotations — each accompanied by a warning).
+✅ full support · ⚠️ heuristic reconstruction (PDF is layout-driven; headings are inferred
+from font sizes, tables from borders/column alignment, links from annotations — all with
+warnings).
 
-### Typical Degradation Strategies
+### Known limitations
 
-| Scenario | Handling |
-| --- | --- |
-| PDF without semantic structure | Infer headings via font-size clustering and paragraphs via line aggregation, with a warning |
-| PDF tables without borders | Fall back to the "text alignment" strategy for reconstruction, with a warning |
-| DOCX flowcharts | Extract the text of each shape as nodes; when connector relationships cannot be reliably recovered, connect nodes in order and warn |
-| Markdown has no underline syntax | Underline degrades to the `<u>` tag (HTML-compatible) |
-| Rendering Mermaid in DOCX | Convert to "node list + Mermaid source appendix" (which can be pasted into mermaid.live for refinement) |
-| Remote images (http(s)) | Keep the original URL reference; no download (avoids network dependencies) |
-| Unparseable images/attachments | Emit a placeholder note and a warning instead of silently dropping |
+- PDF: multi-column layouts, formulas and scanned PDFs cannot be reconstructed as text;
+  scanned pages produce images.
+- DOCX: SmartArt, charts, equations, comments and headers/footers are outside the IR and
+  are skipped or degraded; flowchart connector relationships fall back to sequential edges.
+- Markdown has no cell-merging syntax, so `colspan/rowspan` is expanded into empty cells.
+- Encrypted / password-protected files must be unlocked first.
 
-## Example: DOCX with Images and a Flowchart → Markdown
+## PDF engines
 
-Given an input `sample.docx` (containing headings, lists, a table, a hyperlink, an image, a group-shape flowchart, and an embedded CSV attachment), run:
-
-```bash
-python -m doc_converter samples/sample.docx -t md -o out/
-```
-
-Key excerpt of the output `out/sample.md`:
-
-````markdown
-## 流程图
-
-```mermaid
-graph TD
-    N0["读取源文档"]
-    N1["解析为统一 IR"]
-    N2["写入目标格式"]
-    N0 --> N1
-    N1 --> N2
-```
-
-## 图片
-
-![架构示意图](sample_assets/image-1-6fbd94.png)
-
-📎 [sample-data.csv](sample_assets/ec0505-sample-data.csv)
-````
-
-> Note: the node labels above reflect the original DOCX content (Chinese), which is
-> preserved verbatim during conversion.
-
-- The image is saved as a standalone file under `sample_assets/` and referenced correctly;
-- The flowchart is converted into a Mermaid code block that GitHub can render directly;
-- The embedded attachment is extracted as a file and linked.
-
-One-command reproduction (generate all four samples and run all 12 conversions):
+1. **Chromium / Microsoft Edge** (default on Windows 10/11) — best CSS, tables, CJK and
+   code block rendering, zero extra dependencies;
+2. **WeasyPrint** — requires GTK/Pango (common on Linux/macOS);
+3. **xhtml2pdf** — pure-Python fallback with embedded system CJK fonts.
 
 ```bash
-python examples/make_samples.py     # generate the four sample formats under samples/
-python examples/convert_all.py      # run all 12 conversions and print warnings; output goes to out/
+doc-converter --list-engines
 ```
 
-## Project Structure
+## Development
 
-```
-doc-converter/
-├── src/doc_converter/
-│   ├── __init__.py            # public API exports
-│   ├── __main__.py            # entry point for python -m doc_converter
-│   ├── cli.py                 # command line (argparse)
-│   ├── converter.py           # conversion orchestration: read -> IR -> write
-│   ├── model.py               # unified intermediate representation (Document/Block/Inline)
-│   ├── assets.py              # image/attachment asset management (file/datauri/embed)
-│   ├── errors.py              # exception and error-code system
-│   ├── utils.py               # general utilities
-│   ├── readers/               # readers for the four source formats
-│   │   ├── docx_reader.py     #   python-docx, with group shapes / OLE attachments
-│   │   ├── html_reader.py     #   recursive parsing with BeautifulSoup
-│   │   ├── markdown_reader.py #   markdown-it-py (GFM + Mermaid)
-│   │   └── pdf_reader.py      #   heuristic reconstruction with pdfplumber + pypdf attachments
-│   └── writers/               # writers for the four target formats
-│       ├── markdown_writer.py #   GFM (pipe tables / Mermaid / escaping)
-│       ├── html_writer.py     #   semantic HTML + built-in styles
-│       ├── docx_writer.py     #   python-docx (styles/tables/hyperlinks/embedded images)
-│       └── pdf_writer.py      #   dual engines: WeasyPrint / xhtml2pdf
-├── examples/
-│   ├── make_samples.py        # generate sample documents in all four formats
-│   └── convert_all.py         # end-to-end verification of all 12 conversion combinations
-├── tests/
-│   ├── conftest.py
-│   └── test_converter.py      # 19 test cases: matrix/structure/assets/CLI/error handling
-├── pyproject.toml             # packaging and dependencies (including the doc-converter CLI entry point)
-├── requirements.txt
-├── LICENSE                    # MIT
-├── README.md                  # 简体中文
-└── README_EN.md               # English
+```bash
+pip install -e ".[gui]"
+python -m doc_converter          # CLI
+python -m doc_converter.gui      # desktop
 ```
 
-## Testing
+Python **3.10+** (tested on 3.14).
+
+## Tests
 
 ```bash
 pip install pytest
-pytest -q          # 19 passed
+pytest -q          # 84 passed
 ```
 
-Coverage: pairwise conversion across the four source formats, structural assertions for headings/lists/tables/links/code blocks, image extraction and DOCX embedding, attachment extraction, batch fault tolerance, CLI behavior, and error codes (file not found / unsupported format / identical source and target formats).
+Covers the 12-way matrix, readers (DOCX localized styles/`w:numPr`/content controls/revisions/
+text boxes/merged tables, HTML nested lists/spans, Markdown nesting/Mermaid/front matter,
+PDF headings/paragraphs/lists/tables/header-footer removal), writers (Markdown escaping,
+HTML structure, DOCX numbering restarts/merges/alt text/hyperlinks, PDF engines/page size/
+attachments), CLI behaviour, and the Qt GUI in offscreen mode.
 
-## Adding a New Format
+## Build the Windows executables
 
-```python
-from doc_converter.readers.base import BaseReader, register_reader
-from doc_converter.writers.base import BaseWriter, register_writer
-from doc_converter.model import Document
-
-@register_reader
-class RstReader(BaseReader):
-    extensions = ("rst",)
-    def read(self, path, doc: Document) -> Document:
-        ...  # parse into doc.blocks
-
-@register_writer
-class RstWriter(BaseWriter):
-    extension = "rst"
-    def write(self, doc: Document, out_path, assets) -> Path:
-        ...  # render doc.blocks
+```bash
+python -m pip install pyinstaller PySide6
+python packaging/build.py          # both GUI and CLI
 ```
 
-It becomes usable immediately after registration: `convert("a.rst", target="md")`.
-
-## Design Notes
-
-- **Why use an IR instead of pairwise conversion?** Direct pairwise conversion would require 12 sets of logic; the IR architecture needs only 4+4 readers/writers and inherently guarantees consistency across every conversion path.
-- **Why three asset modes?** Markdown/HTML need file references (convenient for version control and reading); PDF must be self-contained (data URI); DOCX natively supports binary embedding (embed).
-- **Why is PDF a "reconstruction"?** PDF only records drawing instructions and retains no semantic structure. This project reconstructs as much as possible via font-size clustering, text-line aggregation, and table strategies (lines → text fallback), and clearly communicates the differences through warnings rather than pretending to be perfect.
-
-## Dependencies
-
-| Package | Purpose |
+| Artifact | Description |
 | --- | --- |
-| `python-docx` | DOCX reading and writing |
-| `beautifulsoup4` | HTML parsing |
-| `markdown-it-py` + `linkify-it-py` | Markdown parsing (GFM-compatible) |
-| `pdfplumber` | PDF text/table/image extraction |
-| `pypdf` | PDF embedded attachment extraction |
-| `Pillow` | Image processing |
-| `xhtml2pdf` | PDF output engine (pure-Python fallback) |
-| `weasyprint` (optional) | PDF output engine (preferred, requires the GTK runtime) |
+| `dist/DocConverter.exe` | Desktop app (single file, windowed, CLI args supported) |
+| `dist/doc-converter.exe` | CLI-only build (smaller) |
+
+Specs: `packaging/DocConverter.spec`, `packaging/doc-converter-cli.spec`.
 
 ## License
 

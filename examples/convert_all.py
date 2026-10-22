@@ -52,8 +52,9 @@ def main() -> int:
                 print(f"[FAIL] {src_fmt} -> {dst_fmt}: {exc}")
                 continue
             asset_count = len(list(out_dir.glob("*_assets/*"))) if out_dir.exists() else 0
+            engine = f"  engine={result.engine}" if result.engine else ""
             print(f"[OK] {src_fmt:5s} -> {dst_fmt:5s}  {result.output.name}"
-                  f"  assets={asset_count}  warnings={len(result.warnings)}")
+                  f"  assets={asset_count}  warnings={len(result.warnings)}{engine}")
             for warning in result.warnings:
                 print(f"       - {warning}")
     print(f"\nmatrix done: {total - failures}/{total} succeeded")

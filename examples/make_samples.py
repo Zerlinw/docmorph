@@ -5,16 +5,15 @@
     python examples/make_samples.py
 
 产物（samples/ 目录）：
-    diagram.png          示例图片（PIL 绘制）
+    diagram.png          示例图片（PIL 绘制，使用系统中文字体）
     sample.docx          含标题/列表/表格/超链接/图片/流程图/嵌入附件的 DOCX
-    sample.md            等价的 Markdown（含 Mermaid 流程图）
-    sample.html          等价的 HTML
-    sample.pdf           由 HTML 排版的 PDF
+    sample.md            等价的 Markdown（含嵌套列表与 Mermaid 流程图）
+    sample.html          由 Markdown 经 doc-converter 生成的 HTML
+    sample.pdf           由 HTML 经 doc-converter 排版的 PDF（优先 Edge/Chromium）
 """
 
 from __future__ import annotations
 
-import io
 import sys
 from pathlib import Path
 
@@ -83,37 +82,65 @@ print(result.output_path)
 """
 
 
+def _cjk_font(size: int):
+    """加载系统中文字体，保证示意图中的中文可正常显示。"""
+    from PIL import ImageFont
+
+    candidates = [
+        Path(r"C:\Windows\Fonts\msyh.ttc"),
+        Path(r"C:\Windows\Fonts\Deng.ttf"),
+        Path(r"C:\Windows\Fonts\simhei.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/System/Library/Fonts/PingFang.ttc"),
+    ]
+    for path in candidates:
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+
 def make_diagram(path: Path) -> None:
     """用 PIL 绘制一张简单的架构示意图。"""
     from PIL import Image, ImageDraw
 
     width, height = 900, 420
-    img = Image.new("RGB", (width, height), "#ffffff")
-    draw = ImageDraw.Draw(img)
+    image = Image.new("RGB", (width, height), "#ffffff")
+    draw = ImageDraw.Draw(image)
+    font = _cjk_font(22)
+    small = _cjk_font(18)
     boxes = [
         (60, 60, "DOCX", "#dbeafe"),
         (280, 60, "HTML", "#dcfce7"),
         (500, 60, "Markdown", "#fef9c3"),
         (720, 60, "PDF", "#fee2e2"),
     ]
+
+    def centered(text: str, box, used_font, color="#0f172a") -> None:
+        x, y, w, h = box
+        bbox = draw.textbbox((0, 0), text, font=used_font)
+        draw.text((x + (w - (bbox[2] - bbox[0])) / 2 - bbox[0],
+                   y + (h - (bbox[3] - bbox[1])) / 2 - bbox[1]),
+                  text, fill=color, font=used_font)
+
     for x, y, label, color in boxes:
         draw.rectangle([x, y, x + 130, y + 70], fill=color, outline="#334155",
                        width=3)
-        draw.text((x + 35, y + 25), label, fill="#0f172a")
-    draw.rectangle([280, 240, 620, 320], fill="#e0e7ff", outline="#334155",
+        centered(label, (x, y, 130, 70), font)
+    draw.rectangle([260, 240, 640, 320], fill="#e0e7ff", outline="#334155",
                    width=3)
-    draw.text((350, 265), "统一 IR（doc_converter.model）", fill="#0f172a")
+    centered("统一 IR（doc_converter.model）", (260, 240, 380, 80), small)
     for x, y, _, _ in boxes:
         draw.line([x + 65, y + 70, x + 65, 150], fill="#475569", width=3)
         draw.line([x + 65, 150, 450, 150], fill="#475569", width=3)
         draw.line([450, 150, 450, 240], fill="#475569", width=3)
-    draw.text((320, 170), "读取器 Readers", fill="#475569")
-    draw.text((330, 340), "写入器 Writers", fill="#475569")
-    draw.line([450, 320, 450, 380], fill="#475569", width=3)
-    for x, y, _, _ in boxes:
-        draw.line([450, 380, x + 65, 380], fill="#475569", width=3)
-        draw.line([x + 65, 380, x + 65, 330], fill="#475569", width=3)
-    img.save(path)
+    centered("读取器 Readers", (150, 158, 240, 26), small, "#475569")
+    centered("写入器 Writers", (150, 330, 240, 26), small, "#475569")
+    draw.line([450, 320, 450, 366], fill="#475569", width=3)
+    draw.polygon([(438, 366), (462, 366), (450, 384)], fill="#475569")
+    image.save(path)
 
 
 # ---------------------------------------------------------------------------
@@ -174,8 +201,8 @@ def _flow_paragraph_xml() -> str:
         ("写入目标格式", 2900000, 100000),
     ]
     wsp = "".join(
-        _FLOW_NODE.format(sid=i + 10, x=x, y=y, text=text)
-        for i, (text, x, y) in enumerate(nodes)
+        _FLOW_NODE.format(sid=index + 10, x=x, y=y, text=text)
+        for index, (text, x, y) in enumerate(nodes)
     )
     return _FLOW_XML.format(wsp_nodes=wsp)
 
@@ -207,13 +234,15 @@ def _add_hyperlink(paragraph, url: str, text: str) -> None:
 
 def make_docx(path: Path, diagram: Path) -> None:
     from docx import Document
-    from docx.opc.part import Part
     from docx.opc.packuri import PackURI
-    from docx.shared import Inches
+    from docx.opc.part import Part
     from docx.oxml import parse_xml
+    from docx.shared import Inches
 
     doc = Document()
     doc.core_properties.title = "文档转换助手示例文档"
+    doc.core_properties.author = "doc-converter"
+    doc.core_properties.subject = "转换示例"
 
     doc.add_heading("文档转换助手示例文档", level=0)
     doc.add_paragraph(
@@ -231,9 +260,8 @@ def make_docx(path: Path, diagram: Path) -> None:
     doc.add_heading("结构对比表", level=1)
     table = doc.add_table(rows=5, cols=4)
     table.style = "Table Grid"
-    header = ["格式", "结构保留", "图片", "附件"]
-    for i, text in enumerate(header):
-        cell = table.cell(0, i)
+    for index, text in enumerate(["格式", "结构保留", "图片", "附件"]):
+        cell = table.cell(0, index)
         cell.text = ""
         run = cell.paragraphs[0].add_run(text)
         run.bold = True
@@ -243,33 +271,32 @@ def make_docx(path: Path, diagram: Path) -> None:
         ("HTML", "完整", "文件引用", "链接引用"),
         ("Markdown", "完整", "文件引用", "链接引用"),
     ]
-    for r, row in enumerate(data, start=1):
-        for c, text in enumerate(row):
-            table.cell(r, c).text = text
+    for row_index, row in enumerate(data, start=1):
+        for column, text in enumerate(row):
+            table.cell(row_index, column).text = text
 
     doc.add_heading("图片与链接", level=1)
-    para = doc.add_paragraph("项目地址：")
-    _add_hyperlink(para, "https://github.com/example/doc-converter",
+    paragraph = doc.add_paragraph("项目地址：")
+    _add_hyperlink(paragraph, "https://github.com/example/doc-converter",
                    "https://github.com/example/doc-converter")
-    doc.add_paragraph("下面是行内图片：").add_run().add_picture(str(diagram),
-                                                               width=Inches(4))
+    doc.add_paragraph("下面是行内图片：").add_run().add_picture(
+        str(diagram), width=Inches(4))
     doc.add_paragraph("下面是块级图片：")
     block = doc.add_paragraph()
     block.alignment = 1
     block.add_run().add_picture(str(diagram), width=Inches(5))
 
     doc.add_heading("流程图", level=1)
-    flow_para = doc.add_paragraph()
-    flow_para._p.append(parse_xml(_flow_paragraph_xml()))
+    flow_paragraph = doc.add_paragraph()
+    flow_paragraph._p.append(parse_xml(_flow_paragraph_xml()))
 
     doc.add_heading("代码示例", level=1)
     code = doc.add_paragraph()
     run = code.add_run('from doc_converter import convert\n'
                        'result = convert("sample.docx", target="md")\n'
-                       'print(result.output_path)')
+                       'print(result.output)')
     run.font.name = "Consolas"
 
-    # ---- 嵌入附件（OLE/package 部件） ----
     payload = b"name,value\nsample-attachment,1\n"
     part = Part(
         PackURI("/word/embeddings/sample-data.csv"),
@@ -287,115 +314,8 @@ def make_docx(path: Path, diagram: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# HTML / PDF
+# 主流程
 # ---------------------------------------------------------------------------
-
-def make_html(path: Path) -> None:
-    html = DIAGRAM_MD.replace(
-        "![架构示意图](diagram.png)",
-        '<img src="diagram.png" alt="架构示意图" width="600">',
-    ).replace(
-        "项目地址：<https://github.com/example/doc-converter>",
-        '项目地址：<a href="https://github.com/example/doc-converter">'
-        "https://github.com/example/doc-converter</a>",
-    )
-    # 简单把 Markdown 主体包进语义化 HTML（标题/表格/代码块已是标准 Markdown）
-    body_lines: list[str] = []
-    in_code = False
-    in_table = False
-    for line in html.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            body_lines.append("</pre>" if in_code else "<pre><code>")
-            in_code = not in_code
-            continue
-        if in_code:
-            body_lines.append(line.replace("<", "&lt;").replace(">", "&gt;"))
-            continue
-        if stripped.startswith("|"):
-            cells = [c.strip() for c in stripped.strip("|").split("|")]
-            if all(set(c) <= set("-: ") for c in cells):
-                continue
-            tag = "th" if not in_table else "td"
-            if not in_table:
-                body_lines.append("<table>")
-                in_table = True
-            body_lines.append(
-                "<tr>" + "".join(f"<{tag}>{c}</{tag}>" for c in cells) + "</tr>")
-            continue
-        if in_table:
-            body_lines.append("</table>")
-            in_table = False
-        if stripped.startswith("#"):
-            level = len(stripped) - len(stripped.lstrip("#"))
-            body_lines.append(f"<h{level}>{stripped[level:].strip()}</h{level}>")
-        elif stripped == "---":
-            body_lines.append("<hr>")
-        elif stripped.startswith(">"):
-            body_lines.append(f"<blockquote>{stripped[1:].strip()}</blockquote>")
-        elif stripped:
-            text = stripped
-            text = text.replace("**", "").replace("*", "")
-            body_lines.append(f"<p>{text}</p>")
-    if in_table:
-        body_lines.append("</table>")
-    if in_code:
-        body_lines.append("</pre>")
-
-    document = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<title>文档转换助手示例文档</title>
-<style>
-body {{ font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
-       max-width: 860px; margin: 2rem auto; line-height: 1.65; }}
-table {{ border-collapse: collapse; width: 100%; }}
-th, td {{ border: 1px solid #ccc; padding: .4em .7em; }}
-th {{ background: #f6f8fa; }}
-pre {{ background: #f6f8fa; padding: 1em; border-radius: 6px; }}
-blockquote {{ border-left: 4px solid #ccc; color: #555; padding-left: 1em; }}
-img {{ max-width: 100%; }}
-</style>
-</head>
-<body>
-{chr(10).join(body_lines)}
-</body>
-</html>
-"""
-    path.write_text(document, encoding="utf-8")
-
-
-def make_pdf(path: Path, html_path: Path) -> None:
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-    from xhtml2pdf import pisa
-
-    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
-    html = html_path.read_text(encoding="utf-8")
-    # 将本地图片内联为 data URI，确保 PDF 自包含
-    import base64
-    diagram = html_path.parent / "diagram.png"
-    if diagram.exists() and 'src="diagram.png"' in html:
-        b64 = base64.b64encode(diagram.read_bytes()).decode("ascii")
-        html = html.replace('src="diagram.png"',
-                            'src="data:image/png;base64,%s"' % b64)
-    if "</head>" in html:
-        html = html.replace(
-            "</head>",
-            "<style>* { font-family:'STSong-Light',sans-serif !important; }"
-            "head,title,style,script,meta,link { display:none !important; }"
-            "</style></head>",
-            1,
-        )
-    import logging
-    logging.disable(logging.CRITICAL)
-    with open(path, "wb") as fh:
-        status = pisa.CreatePDF(html.encode("utf-8"), dest=fh, encoding="utf-8")
-    logging.disable(logging.NOTSET)
-    if status.err:
-        raise RuntimeError(f"PDF 生成失败: {status.err}")
-
 
 def main() -> None:
     SAMPLES.mkdir(parents=True, exist_ok=True)
@@ -403,21 +323,23 @@ def main() -> None:
     make_diagram(diagram)
     print(f"[ok] {diagram}")
 
-    docx_path = SAMPLES / "sample.docx"
-    make_docx(docx_path, diagram)
-    print(f"[ok] {docx_path}")
-
     md_path = SAMPLES / "sample.md"
     md_path.write_text(DIAGRAM_MD, encoding="utf-8")
     print(f"[ok] {md_path}")
 
+    docx_path = SAMPLES / "sample.docx"
+    make_docx(docx_path, diagram)
+    print(f"[ok] {docx_path}")
+
+    from doc_converter import convert
+
     html_path = SAMPLES / "sample.html"
-    make_html(html_path)
+    convert(md_path, target="html", output=html_path)
     print(f"[ok] {html_path}")
 
     pdf_path = SAMPLES / "sample.pdf"
-    make_pdf(pdf_path, html_path)
-    print(f"[ok] {pdf_path}")
+    result = convert(html_path, target="pdf", output=pdf_path)
+    print(f"[ok] {pdf_path} (engine={result.engine})")
 
 
 if __name__ == "__main__":

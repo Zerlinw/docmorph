@@ -12,6 +12,7 @@ from .assets import MODE_DATAURI, MODE_EMBED, MODE_FILE, AssetStore
 from .errors import (ConversionError, EmptyDocumentError, FileNotFoundError_,
                      UnsupportedFormatError)
 from .model import Document
+from .pdf_engine import PAGE_SIZES
 from .readers.base import get_reader
 from .utils import ext_of
 from .writers.base import get_writer
@@ -20,7 +21,7 @@ SUPPORTED_FORMATS = ("pdf", "docx", "html", "md")
 
 _EXT_ALIASES = {
     "htm": "html", "xhtml": "html",
-    "markdown": "md", "mdown": "md",
+    "markdown": "md", "mdown": "md", "mkd": "md", "mkdn": "md",
     "doc": "docx", "word": "docx",
 }
 
@@ -43,6 +44,7 @@ class ConversionResult:
     target_format: str
     warnings: list[str] = field(default_factory=list)
     assets: list[Path] = field(default_factory=list)
+    engine: str | None = None          # PDF 实际使用的排版引擎
 
     @property
     def ok(self) -> bool:
@@ -69,7 +71,9 @@ def convert(input_path: str | Path,
             target: str,
             source_format: str | None = None,
             output: str | Path | None = None,
-            asset_mode: str | None = None) -> ConversionResult:
+            asset_mode: str | None = None,
+            pdf_engine: str = "auto",
+            page_size: str = "A4") -> ConversionResult:
     """转换单个文件。
 
     参数:
@@ -80,10 +84,16 @@ def convert(input_path: str | Path,
                        缺省时输出到输入文件所在目录。
         asset_mode:    资源模式（``file`` / ``datauri`` / ``embed``），
                        缺省按目标格式自动选择。
+        pdf_engine:    PDF 排版引擎（``auto`` / ``chromium`` / ``weasyprint`` /
+                       ``xhtml2pdf``）。
+        page_size:     PDF 页面尺寸（``A4`` / ``Letter`` / ``A3`` / ``A5``）。
     """
     src = Path(input_path)
     if not src.exists():
         raise FileNotFoundError_(str(src))
+    if src.is_dir():
+        raise ConversionError(f"输入路径是目录而不是文件: {src}", code="read_error",
+                              source=str(src))
 
     src_fmt = normalize_format(source_format) if source_format else infer_format(src)
     dst_fmt = normalize_format(target)
@@ -104,8 +114,30 @@ def convert(input_path: str | Path,
         raise EmptyDocumentError(str(src))
 
     mode = asset_mode or _ASSET_MODES[dst_fmt]
-    assets = AssetStore(out_path.parent, out_path.stem, mode=mode)
+    if mode not in (MODE_FILE, MODE_DATAURI, MODE_EMBED):
+        raise ConversionError(f"未知的资源模式: {mode!r}",
+                              code="invalid_option", source=str(src))
+    if mode == MODE_EMBED and dst_fmt != "docx":
+        # embed 语义只对 DOCX 成立，其它格式回退为独立文件，避免图片引用失效
+        doc.warn("embed 资源模式仅适用于 DOCX，已自动回退为独立文件模式")
+        mode = MODE_FILE
+    assets = AssetStore(
+        out_path.parent, out_path.stem, mode=mode,
+        source_dir=src.parent,
+        # DOCX 需要真实二进制、PDF 需要 data URI，远程图片必须下载
+        fetch_remote=dst_fmt in ("docx", "pdf") or mode in (MODE_EMBED, MODE_DATAURI),
+        warn=doc.warn,
+    )
+
+    engine_used = None
+    if hasattr(writer, "engine"):
+        writer.engine = pdf_engine
+    if hasattr(writer, "page_size"):
+        writer.page_size = page_size if page_size in PAGE_SIZES else "A4"
+
     writer.write(doc, out_path, assets)
+    if dst_fmt == "pdf":
+        engine_used = _used_engine(writer)
 
     return ConversionResult(
         source=src,
@@ -114,6 +146,7 @@ def convert(input_path: str | Path,
         target_format=dst_fmt,
         warnings=list(doc.warnings),
         assets=list(assets.files),
+        engine=engine_used,
     )
 
 
@@ -122,7 +155,9 @@ def convert_batch(inputs: list[str | Path],
                   source_format: str | None = None,
                   output: str | Path | None = None,
                   asset_mode: str | None = None,
-                  on_error: str = "continue"
+                  on_error: str = "continue",
+                  pdf_engine: str = "auto",
+                  page_size: str = "A4"
                   ) -> tuple[list[ConversionResult],
                              list[tuple[Path, ConversionError]]]:
     """批量转换。
@@ -135,7 +170,8 @@ def convert_batch(inputs: list[str | Path],
     for item in inputs:
         src = Path(item)
         try:
-            results.append(convert(src, target, source_format, output, asset_mode))
+            results.append(convert(src, target, source_format, output, asset_mode,
+                                   pdf_engine=pdf_engine, page_size=page_size))
         except ConversionError as exc:
             failures.append((src, exc))
             if on_error == "raise":
@@ -143,17 +179,25 @@ def convert_batch(inputs: list[str | Path],
     return results, failures
 
 
+def _used_engine(writer) -> str | None:
+    """PdfWriter 在 write 后记录实际引擎（由 pdf_engine 返回）。"""
+    return getattr(writer, "used_engine", None)
+
+
 def _resolve_output(src: Path, output: str | Path | None, dst_fmt: str) -> Path:
+    """解析输出路径：目录（自动命名）或具体文件。"""
     if output is None:
         out_dir = src.parent
         stem = src.stem
     else:
         out = Path(output)
-        if out.suffix:
-            out_dir = out.parent
-            stem = out.stem
-        else:
+        treat_as_dir = (not out.suffix) or out.is_dir() or str(output).endswith(
+            ("/", "\\"))
+        if treat_as_dir:
             out_dir = out
             stem = src.stem
+        else:
+            out_dir = out.parent if str(out.parent) else Path(".")
+            stem = out.stem
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir / f"{stem}.{dst_fmt}"

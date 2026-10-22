@@ -2,60 +2,108 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文档转换助手示例文档</title>
+<meta name="generator" content="doc-converter">
 <style>
-body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
-       max-width: 860px; margin: 2rem auto; line-height: 1.65; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid #ccc; padding: .4em .7em; }
-th { background: #f6f8fa; }
-pre { background: #f6f8fa; padding: 1em; border-radius: 6px; }
-blockquote { border-left: 4px solid #ccc; color: #555; padding-left: 1em; }
-img { max-width: 100%; }
+:root {
+  --fg:#1f2328; --muted:#59636e; --border:#d1d9e0; --accent:#0969da;
+  --bg:#ffffff; --code-bg:#f6f8fa; --quote-bg:#f8fafc;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, "Segoe UI", "Noto Sans", "PingFang SC",
+               "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  color: var(--fg); background: var(--bg); line-height: 1.7;
+  max-width: 880px; margin: 2.5rem auto; padding: 0 1.25rem;
+  font-size: 16px; word-wrap: break-word;
+}
+h1,h2,h3,h4,h5,h6 { line-height:1.3; margin:1.6em 0 .6em; font-weight:650;
+                    scroll-margin-top: 1rem; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom:.3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom:.25em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+h5,h6 { font-size: 1em; color: var(--muted); }
+p { margin: .8em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; height: auto; border-radius: 4px; }
+figure { margin: 1.2em 0; text-align: center; }
+figcaption { color: var(--muted); font-size: .9em; margin-top: .4em; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid var(--border); padding: .45em .7em; text-align:left;
+         vertical-align: top; }
+th { background: var(--code-bg); font-weight:600; }
+tr:nth-child(2n) td { background: #fafbfc; }
+caption { caption-side: top; text-align: left; color: var(--muted);
+          font-size: .9em; padding-bottom: .4em; }
+pre { background: var(--code-bg); padding: 1em; border-radius: 6px;
+      overflow-x: auto; line-height: 1.5; }
+code { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas,
+                   "Liberation Mono", monospace;
+       background: var(--code-bg); padding:.15em .35em; border-radius:4px;
+       font-size:.92em; }
+pre code { background: none; padding: 0; font-size: .9em; }
+blockquote { border-left: 4px solid var(--border); margin:1em 0;
+             padding: .2em 1em; color: var(--muted); background: var(--quote-bg); }
+blockquote > :first-child { margin-top: .4em; }
+blockquote > :last-child { margin-bottom: .4em; }
+hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+ul, ol { padding-left: 1.6em; margin: .6em 0; }
+li + li { margin-top: .2em; }
+.attachment { display:inline-flex; align-items:center; gap:.4em;
+              border:1px solid var(--border); border-radius:6px;
+              padding:.3em .7em; margin:.3em 0; background:var(--code-bg); }
+.flowchart { border:1px dashed var(--border); border-radius:8px;
+             padding:1em; margin:1em 0; overflow-x: auto; }
+.flowchart .mermaid { text-align:center; }
+.flowchart details { margin-top:.6em; color:var(--muted); font-size:.9em; }
+.flowchart summary { cursor: pointer; }
+.doc-title { font-size: 2em; font-weight: 650; border-bottom: 1px solid var(--border);
+             padding-bottom:.3em; margin: 0 0 1em; }
+@media (max-width: 600px) {
+  body { margin: 1.25rem auto; font-size: 15px; }
+  table { font-size: .9em; }
+}
 </style>
 </head>
 <body>
 <h1>文档转换助手示例文档</h1>
-<p>本文档用于演示 doc-converter 对四种格式的处理能力，涵盖标题、列表、</p>
-<p>表格、超链接、图片、流程图（Mermaid）与代码块。</p>
+<p>本文档用于演示 <strong>doc-converter</strong> 对四种格式的处理能力，涵盖标题、列表、表格、超链接、图片、流程图（Mermaid）与代码块。</p>
 <h2>功能特性</h2>
-<p>1. 支持 PDF、DOCX、HTML、Markdown 任意互转</p>
-<p>2. 保留标题、段落、列表、表格等结构</p>
-<p>3. 正确处理图片、流程图与嵌入附件</p>
-<p>- 图片保存为文件并在目标格式中引用</p>
-<p>- 流程结构转换为目标格式可表达的形式</p>
-<p>4. 支持单文件与批量转换</p>
+<ol><li>支持 PDF、DOCX、HTML、Markdown 任意互转</li><li>保留标题、段落、列表、表格等结构</li><li>正确处理图片、流程图与嵌入附件<ul><li>图片保存为文件并在目标格式中引用</li><li>流程结构转换为目标格式可表达的形式</li></ul></li><li>支持单文件与批量转换</li></ol>
 <h2>结构对比表</h2>
-<table>
-<tr><th>格式</th><th>结构保留</th><th>图片</th><th>流程图</th><th>附件</th></tr>
-<tr><td>PDF</td><td>启发式重建</td><td>裁剪导出</td><td>转为文本结构</td><td>EmbeddedFile</td></tr>
-<tr><td>DOCX</td><td>完整</td><td>嵌入</td><td>组合形状提取</td><td>OLE 对象</td></tr>
-<tr><td>HTML</td><td>完整</td><td>文件引用</td><td>Mermaid 渲染</td><td>链接引用</td></tr>
-<tr><td>Markdown</td><td>完整</td><td>文件引用</td><td>Mermaid 代码块</td><td>链接引用</td></tr>
-</table>
+<table><thead><tr><th>格式</th><th>结构保留</th><th>图片</th><th>流程图</th><th>附件</th></tr></thead><tbody><tr><td>PDF</td><td>启发式重建</td><td>裁剪导出</td><td>转为文本结构</td><td>EmbeddedFile</td></tr><tr><td>DOCX</td><td>完整</td><td>嵌入</td><td>组合形状提取</td><td>OLE 对象</td></tr><tr><td>HTML</td><td>完整</td><td>文件引用</td><td>Mermaid 渲染</td><td>链接引用</td></tr><tr><td>Markdown</td><td>完整</td><td>文件引用</td><td>Mermaid 代码块</td><td>链接引用</td></tr></tbody></table>
 <h2>流程图示例</h2>
-<pre><code>
-graph TD
-    A["读取源文档"] --&gt; B["解析为统一 IR"]
-    B --&gt; C{"目标格式"}
-    C --&gt;|PDF| D["HTML 排版引擎"]
-    C --&gt;|DOCX| E["python-docx 写入"]
-    C --&gt;|Markdown| F["Mermaid + 管道表格"]
-    C --&gt;|HTML| G["语义化 HTML"]
-</pre>
-<h2>代码示例</h2>
-<pre><code>
-from doc_converter import convert
+<div class="flowchart"><div class="mermaid">graph TD
+    A[&quot;读取源文档&quot;] --&gt; B[&quot;解析为统一 IR&quot;]
+    B --&gt; C{&quot;目标格式&quot;}
+    C --&gt;|PDF| D[&quot;HTML 排版引擎&quot;]
+    C --&gt;|DOCX| E[&quot;python-docx 写入&quot;]
+    C --&gt;|Markdown| F[&quot;Mermaid + 管道表格&quot;]
+    C --&gt;|HTML| G[&quot;语义化 HTML&quot;]</div><noscript><ol><li>读取源文档</li><li>解析为统一 IR</li><li>目标格式</li><li>HTML 排版引擎</li><li>python-docx 写入</li><li>Mermaid + 管道表格</li><li>语义化 HTML</li></ol></noscript><details><summary>查看流程节点文本</summary><ol><li>读取源文档</li><li>解析为统一 IR</li><li>目标格式</li><li>HTML 排版引擎</li><li>python-docx 写入</li><li>Mermaid + 管道表格</li><li>语义化 HTML</li></ol></details></div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+window.addEventListener('load', function () {
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+  }
+});
+</script>
 
-result = convert("sample.docx", target="md", output="out/")
-print(result.output_path)
-</pre>
+<h2>代码示例</h2>
+<pre><code class="language-python">from doc_converter import convert
+
+result = convert(&quot;sample.docx&quot;, target=&quot;md&quot;, output=&quot;out/&quot;)
+print(result.output_path)</code></pre>
 <h2>图片与链接</h2>
-<p><img src="diagram.png" alt="架构示意图" width="600"></p>
+<p><img src="sample_assets/架构示意图-1-3cfc86.png" alt="架构示意图"></p>
 <p>项目地址：<a href="https://github.com/example/doc-converter">https://github.com/example/doc-converter</a></p>
 <h2>引用与提示</h2>
-<blockquote>提示：PDF 是版式驱动格式，标题层级由字号启发式推断。</blockquote>
-<p></p>
-<p>—— 由示例生成器创建 ——</p>
+<blockquote><p>提示：PDF 是版式驱动格式，标题层级由字号启发式推断。</p></blockquote>
+<hr>
+<p><em>—— 由示例生成器创建 ——</em></p>
 </body>
 </html>

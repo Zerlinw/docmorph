@@ -1,154 +1,105 @@
 """doc_converter.writers.pdf_writer —— PDF 写入器。
 
-策略：先把 IR 渲染为带样式的 HTML（复用 HtmlWriter），再排版为 PDF。
+策略：先把 IR 渲染为带样式的 HTML（复用 :class:`HtmlWriter`），再交给
+:mod:`doc_converter.pdf_engine` 排版为 PDF。
 
-排版引擎按可用性自动选择：
-  1. `WeasyPrint`（质量最佳，但依赖 GTK/Pango 原生运行时）；
-  2. `xhtml2pdf`（纯 Python，无原生依赖，作为通用降级方案）。
-
-注意：PDF 中无法执行 Mermaid 脚本，流程图降级为"节点 + 连线"的文本结构。
+资源以 data URI 内联，保证版式引擎无需解析相对路径；附件仍落盘到
+``<输出名>_assets/``，同时通过 pypdf 嵌入 PDF 文件本身，做到"自包含 + 可提取"。
 """
 
 from __future__ import annotations
 
-import logging
-import warnings
 from pathlib import Path
 
 from ..assets import MODE_DATAURI, AssetStore
 from ..errors import DependencyError, WriteError
-from ..model import Document
+from ..model import Attachment, Document, iter_blocks
+from ..pdf_engine import PAGE_SIZES, render_pdf
 from .base import BaseWriter, register_writer
+from .html_writer import HtmlWriter, print_stylesheet
 
 
 @register_writer
 class PdfWriter(BaseWriter):
     extension = "pdf"
 
+    def __init__(self, engine: str = "auto", page_size: str = "A4") -> None:
+        self.engine = engine
+        self.page_size = page_size if page_size in PAGE_SIZES else "A4"
+        self.used_engine: str | None = None
+
     def write(self, doc: Document, out_path: Path, assets: AssetStore) -> Path:
-        # PDF 需要自包含资源：将图片/附件转为 data URI，避免 base_url 歧义
-        embedded = AssetStore(out_path.parent, out_path.stem, mode=MODE_DATAURI)
-        html = self._render_html(doc, embedded)
+        # PDF 需要自包含资源：图片转为 data URI，远程图片按需下载
+        embedded = AssetStore(
+            out_path.parent, out_path.stem, mode=MODE_DATAURI,
+            source_dir=assets.source_dir, fetch_remote=True, warn=doc.warn)
+        html_writer = HtmlWriter()
+        html_writer.render_mermaid = False     # PDF 不执行脚本，使用文本结构
+        html = html_writer.render_to_string(doc, embedded)
+        html = inject_print_stylesheet(html, self.page_size)
 
-        if _weasyprint_available():
-            self._write_weasyprint(html, out_path)
-        elif _xhtml2pdf_available():
-            self._write_xhtml2pdf(html, out_path)
-        else:
-            raise DependencyError(
-                "PDF 输出需要 weasyprint（推荐，需 GTK 运行时）或 xhtml2pdf，"
-                "请执行: pip install weasyprint xhtml2pdf")
-        return out_path
-
-    # ------------------------------------------------------------------ 引擎
-    @staticmethod
-    def _write_weasyprint(html: str, out_path: Path) -> None:
         try:
-            from weasyprint import HTML
-            HTML(string=html, base_url=str(out_path.parent)).write_pdf(str(out_path))
-        except Exception as exc:  # noqa: BLE001
-            raise WriteError(str(out_path),
-                             f"weasyprint: {type(exc).__name__}: {exc}")
-
-    @staticmethod
-    def _write_xhtml2pdf(html: str, out_path: Path) -> None:
-        try:
-            from xhtml2pdf import pisa
-            _register_cjk_font()
-            # xhtml2pdf 需要字节输入才能正确按 UTF-8 解码
-            source = _inject_cjk_css(html).encode("utf-8")
-            with _QuietLogging(), open(out_path, "wb") as fh:
-                status = pisa.CreatePDF(source, dest=fh, encoding="utf-8")
-            if status.err:
-                raise WriteError(str(out_path),
-                                 f"xhtml2pdf 报告 {status.err} 个错误（输出可能不完整）")
-        except WriteError:
+            self.used_engine = render_pdf(html, out_path, engine=self.engine,
+                                          page_size=self.page_size, warn=doc.warn)
+        except DependencyError:
             raise
         except Exception as exc:  # noqa: BLE001
-            raise WriteError(str(out_path),
-                             f"xhtml2pdf: {type(exc).__name__}: {exc}")
+            raise WriteError(str(out_path), str(exc)) from exc
 
-    # ------------------------------------------------------------------ HTML
-    @staticmethod
-    def _render_html(doc: Document, assets: AssetStore) -> str:
-        from .html_writer import HtmlWriter
-        writer = HtmlWriter()
-        writer.render_mermaid = False  # PDF 不支持脚本渲染，使用文本结构
-        return writer.render_to_string(doc, assets)
+        self._finalize(out_path, doc)
+        return out_path
 
-
-# ---------------------------------------------------------------------------
-# 引擎可用性探测（带缓存，避免重复导入与日志噪音）
-# ---------------------------------------------------------------------------
-
-_ENGINE_CACHE: dict[str, bool] = {}
-
-
-class _QuietLogging:
-    """临时静默第三方库在 import 期间写入的日志。"""
-
-    def __enter__(self):
-        self._previous = logging.root.manager.disable
-        logging.disable(logging.CRITICAL)
-        return self
-
-    def __exit__(self, *exc_info):
-        logging.disable(self._previous)
-        return False
-
-
-def _weasyprint_available() -> bool:
-    if "weasyprint" in _ENGINE_CACHE:
-        return _ENGINE_CACHE["weasyprint"]
-    try:
-        with warnings.catch_warnings(), _QuietLogging():
-            warnings.simplefilter("ignore")
-            from weasyprint import HTML  # noqa: F401
-        ok = True
-    except Exception:  # noqa: BLE001 —— 原生库缺失时 ImportError/OSError 均可能
-        ok = False
-    _ENGINE_CACHE["weasyprint"] = ok
-    return ok
+    # ------------------------------------------------------------------ 后处理
+    def _finalize(self, out_path: Path, doc: Document) -> None:
+        attachments = [block for block in iter_blocks(doc.blocks)
+                       if isinstance(block, Attachment) and block.data]
+        metadata = _pdf_metadata(doc)
+        if not attachments and not metadata:
+            return
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except ImportError:  # pragma: no cover
+            return
+        temp = out_path.parent / (out_path.name + ".tmp")
+        try:
+            reader = PdfReader(str(out_path))
+            writer = PdfWriter()
+            writer.append(reader)
+            if metadata:
+                writer.add_metadata(metadata)
+            for attachment in attachments:
+                try:
+                    writer.add_attachment(attachment.name, attachment.data)
+                except Exception as exc:  # noqa: BLE001
+                    doc.warn(f"PDF: 嵌入附件 {attachment.name} 失败: {exc}")
+            with open(temp, "wb") as handle:
+                writer.write(handle)
+            temp.replace(out_path)
+        except Exception as exc:  # noqa: BLE001
+            doc.warn(f"PDF: 写入元数据/附件失败（不影响正文）: {exc}")
+            temp.unlink(missing_ok=True)
 
 
-def _xhtml2pdf_available() -> bool:
-    if "xhtml2pdf" in _ENGINE_CACHE:
-        return _ENGINE_CACHE["xhtml2pdf"]
-    try:
-        from xhtml2pdf import pisa  # noqa: F401
-        ok = True
-    except Exception:  # noqa: BLE001
-        ok = False
-    _ENGINE_CACHE["xhtml2pdf"] = ok
-    return ok
+def inject_print_stylesheet(html: str, page_size: str = "A4") -> str:
+    style = f"<style>{print_stylesheet(page_size)}</style>"
+    if "</head>" in html:
+        return html.replace("</head>", style + "</head>", 1)
+    return style + html
 
 
-# ---------------------------------------------------------------------------
-# xhtml2pdf 的中文支持
-# ---------------------------------------------------------------------------
-
-_CJK_FONT_CSS = (
-    "<style>"
-    "* { font-family: 'STSong-Light', sans-serif !important; }"
-    "head, title, style, script, meta, link { display: none !important; }"
-    "</style>"
-)
-
-
-def _register_cjk_font() -> None:
-    """注册 reportlab 内置中日韩字体（STSong-Light），避免中文变方框。"""
-    try:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
-    except Exception:  # noqa: BLE001
-        pass
-
-
-def _inject_cjk_css(html: str) -> str:
-    if "STSong-Light" in html:
-        return html
-    marker = "</head>"
-    if marker in html:
-        return html.replace(marker, _CJK_FONT_CSS + marker, 1)
-    return _CJK_FONT_CSS + html
+def _pdf_metadata(doc: Document) -> dict[str, str]:
+    meta = doc.metadata or {}
+    if not doc.title and not meta:
+        return {}
+    result: dict[str, str] = {"/Creator": "doc-converter"}
+    if doc.title:
+        result["/Title"] = doc.title
+    for key, pdf_key in (("author", "/Author"), ("subject", "/Subject"),
+                         ("keywords", "/Keywords")):
+        value = meta.get(key)
+        if value:
+            result[pdf_key] = value
+    lang = meta.get("lang")
+    if lang:
+        result["/Lang"] = lang
+    return result

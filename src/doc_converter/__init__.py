@@ -5,13 +5,17 @@
     from doc_converter import convert
 
     result = convert("report.docx", target="md", output="out/")
-    print(result.output_path, result.warnings)
+    print(result.output, result.warnings)
 
 命令行::
 
     python -m doc_converter report.docx -t md -o out/
+
+桌面版（打包后的 Windows 程序）: ``DocConverter.exe``。
 """
 
+from .converter import (ConversionResult, SUPPORTED_FORMATS, convert,
+                        convert_batch)
 from .errors import (ConversionError, DependencyError, EmptyDocumentError,
                      FileNotFoundError_, ReadError, UnsupportedFormatError,
                      WriteError)
@@ -19,10 +23,9 @@ from .model import (Attachment, Block, CodeBlock, Document, FlowchartBlock,
                     Heading, HorizontalRule, ImageBlock, ImageInline, Inline,
                     LineBreak, Link, ListBlock, ListItem, Paragraph, QuoteBlock,
                     TableBlock, TableCell, Text)
-from .converter import (ConversionResult, SUPPORTED_FORMATS, convert,
-                        convert_batch)
+from .pdf_engine import available_engines
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 __all__ = [
     "convert", "convert_batch", "ConversionResult", "SUPPORTED_FORMATS",
@@ -32,5 +35,5 @@ __all__ = [
     "Text", "Link", "LineBreak", "Inline",
     "ConversionError", "UnsupportedFormatError", "ReadError", "WriteError",
     "EmptyDocumentError", "FileNotFoundError_", "DependencyError",
-    "__version__",
+    "available_engines", "__version__",
 ]
